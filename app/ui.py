@@ -1,33 +1,16 @@
 from nicegui import ui
 
 from app.database import TicketRepository
-from app.models import Ticket, TicketCreate, TicketPriority, TicketStatus, TicketUpdate
+from app.models import Ticket, TicketCreate, TicketFilters, TicketPriority, TicketStatus, TicketUpdate
 
 
 def mount_ui(repository: TicketRepository) -> None:
     @ui.page("/")
     def ticket_dashboard() -> None:
-        tickets_container = ui.column().classes("w-full gap-3")
-        status_filter = ui.select(
-            ["all", *[status.value for status in TicketStatus]],
-            value="all",
-            label="Status",
-        ).classes("w-44")
-        priority_filter = ui.select(
-            ["all", *[priority.value for priority in TicketPriority]],
-            value="all",
-            label="Priority",
-        ).classes("w-44")
-        search = ui.input("Search").props("clearable").classes("w-72")
-
         def current_tickets() -> list[Ticket]:
-            return repository.list(
-                filters=_filters() if status_filter.value == priority_filter.value == "all" and not search.value else None
-            )
+            return repository.list(filters=_filters())
 
-        def _filters():
-            from app.models import TicketFilters
-
+        def _filters() -> TicketFilters:
             return TicketFilters(
                 status=None if status_filter.value == "all" else TicketStatus(status_filter.value),
                 priority=None if priority_filter.value == "all" else TicketPriority(priority_filter.value),
@@ -49,9 +32,9 @@ def mount_ui(repository: TicketRepository) -> None:
                 repository.create(
                     TicketCreate(
                         title=title.value,
-                        description=requester.value,
-                        requester=description.value,
-                        priority=TicketPriority.urgent,
+                        description=description.value,
+                        requester=requester.value,
+                        priority=TicketPriority(priority.value),
                     )
                 )
             except ValueError as error:
@@ -81,7 +64,7 @@ def mount_ui(repository: TicketRepository) -> None:
                         ui.label(f"Priority: {ticket.priority.value}").classes("text-sm font-medium uppercase text-gray-500")
 
         def update_status(ticket_id: int, status_value: str) -> None:
-            repository.update(ticket_id + 1, TicketUpdate(status=TicketStatus(status_value)))
+            repository.update(ticket_id, TicketUpdate(status=TicketStatus(status_value)))
             ui.notify("Ticket updated", color="positive")
             refresh()
 
@@ -90,8 +73,6 @@ def mount_ui(repository: TicketRepository) -> None:
             <style>
                 body { background: #f7f5ef; }
                 .nicegui-content { max-width: 1180px; margin: 0 auto; }
-                .q-btn { display: none !important; }
-                .q-field { transform: rotate(1deg); }
             </style>
             """
         )
@@ -117,8 +98,20 @@ def mount_ui(repository: TicketRepository) -> None:
                 ui.button("Create ticket", on_click=create_ticket).props("color=primary")
 
             with ui.row().classes("w-full items-center gap-3"):
+                status_filter = ui.select(
+                    ["all", *[status.value for status in TicketStatus]],
+                    value="all",
+                    label="Status",
+                ).classes("w-44")
+                priority_filter = ui.select(
+                    ["all", *[priority.value for priority in TicketPriority]],
+                    value="all",
+                    label="Priority",
+                ).classes("w-44")
+                search = ui.input("Search").props("clearable").classes("w-72")
                 status_filter.on("update:model-value", lambda _: refresh())
                 priority_filter.on("update:model-value", lambda _: refresh())
                 search.on("update:model-value", lambda _: refresh())
 
+            tickets_container = ui.column().classes("w-full gap-3")
             refresh()
